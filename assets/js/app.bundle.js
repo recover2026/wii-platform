@@ -10659,11 +10659,14 @@
 
   function fetchJSON(adcode) {
     if (_cache.has(adcode)) return Promise.resolve(_cache.get(adcode));
-    // 本地优先（秒开、离线可用）；本地没有该层级（如大部分县级）再走 DataV 远程兜底
-    return fetch(LOCAL + adcode + '_full.json')
+    // ⚠️ DataV.GeoAtlas 有 Referer 防盗链：带 github.io 等外部来源的 Referer 会直接 403。
+    // 必须显式 no-referrer，否则"省级能开、选市后县级列表全空"——而县级正是承保单元。
+    var opt = { referrerPolicy: 'no-referrer', credentials: 'omit' };
+    // 本地优先（秒开、离线可用）；本地没有该层级（如大部分市级）再走 DataV 远程兜底
+    return fetch(LOCAL + adcode + '_full.json', opt)
       .then(function (r) { if (!r.ok) throw new Error('no-local'); return r.json(); })
       .catch(function () {
-        return fetch(BASE + adcode + '_full.json')
+        return fetch(BASE + adcode + '_full.json', opt)
           .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
       })
       .then(function (j) { _cache.set(adcode, j); return j; });
