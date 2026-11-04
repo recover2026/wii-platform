@@ -63,7 +63,7 @@
     wrap.id = 'sfGate';
     wrap.innerHTML =
       '<div class="gate-card">' +
-      '  <img src="assets/img/sunflower-logo.png" alt="" class="gate-logo">' +
+      '  <img src="assets/img/sunflower-logo.webp" alt="" class="gate-logo">' +
       '  <div class="gate-title">向阳<span>社</span><span class="gate-sub"> · 天气指数保险设计平台</span></div>' +
       '  <div class="gate-badge">AGRI · WII DESIGN STUDIO</div>' +
       '  <div class="gate-tip">懂农业种植 · 懂气象数据 · 智能反推方案与费率</div>' +
