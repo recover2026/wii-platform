@@ -1153,7 +1153,14 @@
     opt = opt || {};
     var allHits = perilStages(cropKey, regionKey, peril);
     if (!allHits.length) {
-      return { ok: false, reason: '该作物在所选农业区没有「' + perilName(peril) + '」的物候命中阶段，建议换区或换主害' };
+      // 措辞铁律：「我库里没有」≠「库内说没有」。前者是数据缺口，后者是农艺结论，
+      // 两者对用户的行动指引完全相反（一个是去查原文，一个是放弃该险种）。
+      return {
+        ok: false, code: 'NOT_COVERED',
+        reason: '本平台物候库**未收录**「' + perilName(peril) + '」在此作物/农业区的阶段条目。' +
+          '这不等于库内认定该灾种不是主要威胁——可能库内只给了定性表述、也可能该区阶段表收录不全。' +
+          '请核对 04 库原文，或换区/换主害。'
+      };
     }
 
     // 全生育期跨年 >365 天（多熟季叠加，如柑橘华南 469 天、甘蔗华南 409 天）
@@ -1191,6 +1198,22 @@
 
     var finalWin = { m1: s0.m1, d1: s0.d1, m2: e0.m1, d2: e0.d1 };
     finalWin.crossYear = (finalWin.m2 < finalWin.m1) || (finalWin.m2 === finalWin.m1 && finalWin.d2 < finalWin.d1);
+
+    // 若该灾种的敏感期本身就占了几乎整条生产链，做单一指数必然稀释——
+    // 这不是"窗口选得不好"，而是"该灾种不适合作单一指数"，必须在给出方案前拦住，
+    // 否则会出现"suggest 给窗口 → score 判稀释 → 自己拦自己"的自相矛盾。
+    var _chain = chainSpan(cropKey, regionKey);
+    if (_chain.max > 0) {
+      var _wl = spanLen({ m1: +finalWin.m1, d1: +finalWin.d1, m2: +finalWin.m2, d2: +finalWin.d2, crossYear: (+finalWin.m2 < +finalWin.m1) });
+      if (_wl >= _chain.max * 0.8) {
+        return {
+          ok: false, code: 'TOO_BROAD',
+          reason: '该灾种在本区的最长敏感期为 ' + _chain.max + ' 天，而保险期间需覆盖 ' + _wl +
+            ' 天（占 ' + Math.round(_wl / _chain.max * 100) + '%）。做单一指数等于"什么都保"，' +
+            '风险相关性被稀释、费率会失真。建议：①拆成关键子期分别出单 ②改选更集中的灾种 ③手工设窗并写明依据。'
+        };
+      }
+    }
 
     var lowConf = anchor.precision === 'month';
 
@@ -1289,16 +1312,17 @@
     var raw = D1 + D2 + D3 + D4 + D5;
 
     // 全生育期跨度（用于 G7）
-    var stAll = stagesOf(cropKey, regionKey).filter(function (s) { return s.spanOk; });
-    var seasonLen = 0;
-    if (stAll.length > 1) {
-      var first = axisOf(stAll[0].span, pivot), lastA = axisOf(stAll[stAll.length - 1].span, pivot);
-      seasonLen = lastA.b - first.a + 1;
-      if (seasonLen <= 0) seasonLen = 0;
-    }
+    // ⚠️ G7 的前提是"全生育期"这个分母可信。该区阶段表若只有 1–2 个节点，
+    // 分母会被严重低估，反而把正确的窗口判成"覆盖超 100%、灾种稀释"——
+    // 用残缺数据下否定结论，比不下结论更糟。故仅当阶段数 ≥3 时才启用 G7。
+    var chain = chainSpan(cropKey, regionKey);
+    var seasonLen = chain.max;
+    // 至少要有一条链上有 3 个节点，这个"链长"才可信；否则分母被打残，会误判稀释
+    var seasonTrusted = chain.max > 0 && chain.nodes >= 3 && (chain.nodes / chain.groups) >= 2;
 
     // 七道封顶闸门
     var gates = [];
+    var lateAdvice = [];   // G7 判定完成时 advice 还没声明，先暂存、稍后合并
     function gate(id, cap, why) { gates.push({ id: id, cap: cap, why: why }); }
     if (win.a > peak.a) gate('COV1', 49, '【覆盖类·整改=改窗口】窗口起点晚于最敏感阶段起点，已错过伤害窗口开端');
     // G2 对累积型同样生效：干旱累计需覆盖到需水期末，否则算不出真实亏缺（早期豁免是错的）
@@ -1308,8 +1332,11 @@
       gate('G4', 59, '累积型指数窗口短于最小有效累积期（' + MIN_ACCUM[form] + ' 天），累积量无意义');
     if (form === 'continuous' && win.len < (MIN_ACCUM['continuous'] || 0))
       gate('G5', 59, '连续型指数窗口短于最小连续期（' + MIN_ACCUM['continuous'] + ' 天）');
-    if (seasonLen && win.len >= seasonLen * 0.8)
+    if (seasonTrusted && seasonLen && win.len >= seasonLen * 0.8)
       gate('G7', 59, '窗口≥全生育期 80%，灾种已被稀释为"什么都保"，风险相关性实质丧失');
+    else if (!seasonTrusted && chain.nodes)
+      lateAdvice.push('该区物候阶段表仅 ' + chain.nodes + ' 个节点、' + chain.groups +
+        ' 条生产链，无法可靠判断"窗口是否过宽"，稀释风险请人工确认');
 
     var capAll = gates.reduce(function (m, g) { return Math.min(m, g.cap); }, 100);
 
@@ -1328,6 +1355,7 @@
 
     var grade = total >= 85 ? 'good' : total >= 70 ? 'warn' : 'bad';
     var advice = [];
+    if (lateAdvice.length) advice = advice.concat(lateAdvice);
     gates.forEach(function (g) { advice.push('【' + g.id + '】' + g.why); });
     if (r > 2.0 && !gates.length) advice.push('窗口长度是锚定阶段的 ' + r.toFixed(1) + ' 倍，大量非敏感日被计入，会抬高触发概率、虚增费率');
     if (win.len < peak.len * 0.9) advice.push('窗口短于锚定阶段，赔付责任与实际风险不匹配');
@@ -1349,6 +1377,29 @@
       advice: advice,
       facts: { winLen: win.len, peakLen: peak.len, ratio: r, pre: buf.pre, post: buf.post, form: form }
     };
+  }
+
+  // 单条生产链的跨度：按「熟期 + 生产轨」分组，取组内首尾跨度，再取最大。
+  // 为什么必须分组：甘蔗的春植/秋植/通用是三个并列熟期，桑蚕的桑园与养蚕是两条并行轨，
+  // 把它们首尾相连算出的是假跨度（实测把 184 天的伸长期算成 121 天）。
+  function chainSpan(cropKey, regionKey) {
+    var all = stagesOf(cropKey, regionKey).filter(function (s) { return s.spanOk; });
+    if (!all.length) return { max: 0, groups: 0, nodes: 0 };
+    var g = {}, order = [];
+    all.forEach(function (s) {
+      var k = s.season + '||' + (s.track || '作物');
+      if (!g[k]) { g[k] = []; order.push(k); }
+      g[k].push(s);
+    });
+    var max = 0;
+    order.forEach(function (k) {
+      var arr = g[k];
+      var a = axisOf(arr[0].span, agPivot(cropKey, regionKey));
+      var b = axisOf(arr[arr.length - 1].span, agPivot(cropKey, regionKey));
+      while (b.b < a.a) { b = { a: b.a + 366, b: b.b + 366, len: b.len }; }
+      max = Math.max(max, b.b - a.a + 1);
+    });
+    return { max: max, groups: order.length, nodes: all.length };
   }
 
   /* ---------- 方案准出闸门（纯函数，可单测） ----------
@@ -1468,7 +1519,7 @@
     SCHEMA_VERSION: SCHEMA_VERSION, loadedMeta: function () { return LOADED_META; },
     coverage: function () { return LOADED_COVERAGE; },
     regionsOf: regionsOf, stagesOf: stagesOf, perilStages: perilStages,
-    suggest: suggest, score: score, gate: gate, calendar: calendar, seasonLength: seasonLength, seasonSpanSum: seasonSpanSum, hasParallelStages: hasParallelStages,
+    suggest: suggest, score: score, gate: gate, calendar: calendar, chainSpan: chainSpan, seasonLength: seasonLength, seasonSpanSum: seasonSpanSum, hasParallelStages: hasParallelStages,
     indexForm: indexForm, bufferFor: bufferFor, WEIGHTS: WEIGHTS, BUFFER: BUFFER, MIN_ACCUM: MIN_ACCUM,
     // 工具（测试与 UI 复用）
     parseNode: parseNode, stageSpan: stageSpan, spanLen: spanLen, overlapLen: overlapLen,
