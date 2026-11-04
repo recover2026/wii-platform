@@ -5,6 +5,37 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>向阳社 · 天气指数保险设计平台</title>
 <meta name="description" content="懂农业种植、懂气象数据：需求反推保险方案、方案测算保险费率">
+<style id="gate-css">
+/* ---- 首屏关键样式（内联）：门禁零依赖即可显示，不必等 app.css ---- */
+:root{
+  --navy:#0c1c30; --navy2:#12263f; --navy3:#1b3354;
+  --gold:#FFC93C; --gold2:#FFB800; --gold-soft:#ffe6a3;
+  --teal:#2e9b8b; --blue:#2f6fb0; --red:#c0392b; --org:#e0792e; --grn:#3b9b6b;
+  --ink:#1f2933; --sub:#5b6b7b; --line:#e3e8ef; --bg:#f3f6fa; --card:#ffffff;
+}
+
+html,body{height:100%;margin:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#0c1c30}
+/* ---------- 门禁 ---------- */
+#sfGate{position:fixed;inset:0;z-index:99999;background:radial-gradient(120% 120% at 50% 0%,#13243c 0%,#0c1c30 60%,#081320 100%);
+  display:grid;place-items:center;font-family:inherit}
+.gate-card{width:min(380px,calc(100% - 40px));text-align:center;padding:8px}
+.gate-logo{width:72px;height:72px;filter:drop-shadow(0 6px 16px rgba(255,184,0,.45))}
+.gate-title{color:var(--gold);font-size:21px;font-weight:800;margin:14px 0 6px}
+.gate-title span{color:var(--gold)}
+.gate-title .gate-sub{color:#f2f7fc;font-weight:600}
+.gate-badge{display:inline-block;color:var(--gold);font-size:11px;letter-spacing:2px;border:1px solid rgba(255,184,0,.5);
+  padding:2px 12px;border-radius:999px;margin-bottom:14px}
+.gate-tip{color:#9fb4cc;font-size:12.5px;margin-bottom:18px}
+.gate-input{width:100%;padding:11px 14px;border-radius:10px;border:1px solid rgba(120,170,220,.3);
+  background:rgba(255,255,255,.06);color:#eef4fb;font-size:14.5px;outline:none;text-align:center;letter-spacing:2px}
+.gate-input:focus{border-color:var(--gold)}
+.gate-msg{color:#ff9090;font-size:12px;min-height:18px;margin-top:9px}
+.gate-btn{width:100%;margin-top:6px;padding:11px;border-radius:10px;border:0;cursor:pointer;
+  background:linear-gradient(135deg,var(--gold),var(--gold2));color:#3b2300;font-size:14.5px;font-weight:800}
+.gate-btn:active{transform:translateY(1px)}
+.gate-foot{color:#5d7086;font-size:10.5px;margin-top:16px;line-height:1.6}
+</style>
 <link rel="stylesheet" href="assets/css/app.css">
 <!-- 访问门禁（须最先加载，登录前挡住页面） -->
 <script src="assets/js/gate.js"></script>
@@ -23,6 +54,18 @@
 </style>
 </head>
 <body>
+<div id="sfGate">
+  <div class="gate-card">
+    <img src="assets/img/sunflower-logo.webp" alt="" class="gate-logo">
+    <div class="gate-title">向阳<span>社</span><span class="gate-sub"> · 天气指数保险设计平台</span></div>
+    <div class="gate-badge">AGRI · WII DESIGN STUDIO</div>
+    <div class="gate-tip">懂农业种植 · 懂气象数据 · 智能反推方案与费率</div>
+    <input id="sfGatePw" type="password" autocomplete="current-password" placeholder="请输入访问密码" class="gate-input">
+    <div id="sfGateMsg" class="gate-msg"></div>
+    <button id="sfGateBtn" class="gate-btn">进入平台</button>
+    <div class="gate-foot">本平台为内部设计辅助工具，数据仅供演示<br>最终以精算报备与监管批复为准</div>
+  </div>
+</div>
 
 <header class="topbar">
   <div class="brand">
@@ -394,5 +437,14 @@
 
 <!-- 脚本：知识库 → 引擎一/二 → 主控 -->
 <script src="assets/js/app.bundle.js" defer></script>
+
+<script>
+/* Service Worker：第二次打开走本地缓存，秒开。注册失败静默，不影响使用。 */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function () { });
+  });
+}
+</script>
 </body>
 </html>
