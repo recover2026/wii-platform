@@ -59,9 +59,13 @@
   }
 
   function mount() {
-    var wrap = document.createElement('div');
-    wrap.id = 'sfGate';
-    wrap.innerHTML =
+    // 优先复用 HTML 内联的门禁结构（首屏零依赖即可显示，不等外部 CSS/JS）；
+    // 未内联时回退为动态创建，两条路径共用下方同一套事件绑定。
+    var wrap = document.getElementById('sfGate');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'sfGate';
+      wrap.innerHTML =
       '<div class="gate-card">' +
       '  <img src="assets/img/sunflower-logo.webp" alt="" class="gate-logo">' +
       '  <div class="gate-title">向阳<span>社</span><span class="gate-sub"> · 天气指数保险设计平台</span></div>' +
@@ -72,7 +76,8 @@
       '  <button id="sfGateBtn" class="gate-btn">进入平台</button>' +
       '  <div class="gate-foot">本平台为内部设计辅助工具，数据仅供演示<br>最终以精算报备与监管批复为准</div>' +
       '</div>';
-    document.body.appendChild(wrap);
+      document.body.appendChild(wrap);
+    }
     document.documentElement.style.overflow = 'hidden';
 
     var pw = wrap.querySelector('#sfGatePw');
