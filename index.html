@@ -5,37 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>向阳社 · 天气指数保险设计平台</title>
 <meta name="description" content="懂农业种植、懂气象数据：需求反推保险方案、方案测算保险费率">
-<style id="gate-css">
-/* ---- 首屏关键样式（内联）：门禁零依赖即可显示，不必等 app.css ---- */
-:root{
-  --navy:#0c1c30; --navy2:#12263f; --navy3:#1b3354;
-  --gold:#FFC93C; --gold2:#FFB800; --gold-soft:#ffe6a3;
-  --teal:#2e9b8b; --blue:#2f6fb0; --red:#c0392b; --org:#e0792e; --grn:#3b9b6b;
-  --ink:#1f2933; --sub:#5b6b7b; --line:#e3e8ef; --bg:#f3f6fa; --card:#ffffff;
-}
-
-html,body{height:100%;margin:0}
-body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#0c1c30}
-/* ---------- 门禁 ---------- */
-#sfGate{position:fixed;inset:0;z-index:99999;background:radial-gradient(120% 120% at 50% 0%,#13243c 0%,#0c1c30 60%,#081320 100%);
-  display:grid;place-items:center;font-family:inherit}
-.gate-card{width:min(380px,calc(100% - 40px));text-align:center;padding:8px}
-.gate-logo{width:72px;height:72px;filter:drop-shadow(0 6px 16px rgba(255,184,0,.45))}
-.gate-title{color:var(--gold);font-size:21px;font-weight:800;margin:14px 0 6px}
-.gate-title span{color:var(--gold)}
-.gate-title .gate-sub{color:#f2f7fc;font-weight:600}
-.gate-badge{display:inline-block;color:var(--gold);font-size:11px;letter-spacing:2px;border:1px solid rgba(255,184,0,.5);
-  padding:2px 12px;border-radius:999px;margin-bottom:14px}
-.gate-tip{color:#9fb4cc;font-size:12.5px;margin-bottom:18px}
-.gate-input{width:100%;padding:11px 14px;border-radius:10px;border:1px solid rgba(120,170,220,.3);
-  background:rgba(255,255,255,.06);color:#eef4fb;font-size:14.5px;outline:none;text-align:center;letter-spacing:2px}
-.gate-input:focus{border-color:var(--gold)}
-.gate-msg{color:#ff9090;font-size:12px;min-height:18px;margin-top:9px}
-.gate-btn{width:100%;margin-top:6px;padding:11px;border-radius:10px;border:0;cursor:pointer;
-  background:linear-gradient(135deg,var(--gold),var(--gold2));color:#3b2300;font-size:14.5px;font-weight:800}
-.gate-btn:active{transform:translateY(1px)}
-.gate-foot{color:#5d7086;font-size:10.5px;margin-top:16px;line-height:1.6}
-</style>
 <link rel="stylesheet" href="assets/css/app.css">
 <!-- 访问门禁（须最先加载，登录前挡住页面） -->
 <script src="assets/js/gate.js"></script>
@@ -54,22 +23,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei
 </style>
 </head>
 <body>
-<div id="sfGate">
-  <div class="gate-card">
-    <img src="assets/img/sunflower-logo.webp" alt="" class="gate-logo">
-    <div class="gate-title">向阳<span>社</span><span class="gate-sub"> · 天气指数保险设计平台</span></div>
-    <div class="gate-badge">AGRI · WII DESIGN STUDIO</div>
-    <div class="gate-tip">懂农业种植 · 懂气象数据 · 智能反推方案与费率</div>
-    <input id="sfGatePw" type="password" autocomplete="current-password" placeholder="请输入访问密码" class="gate-input">
-    <div id="sfGateMsg" class="gate-msg"></div>
-    <button id="sfGateBtn" class="gate-btn">进入平台</button>
-    <div class="gate-foot">本平台为内部设计辅助工具，数据仅供演示<br>最终以精算报备与监管批复为准</div>
-  </div>
-</div>
 
 <header class="topbar">
   <div class="brand">
-    <img class="brand-mark" src="assets/img/sunflower-logo.webp" alt="向阳社">
+    <img class="brand-mark" src="assets/img/sunflower-logo.png" alt="向阳社">
     <div class="brand-txt">
       <div class="bn">向阳<em>社</em><span class="bn-sub"> · 天气指数保险设计平台</span></div>
       <div class="bs">Agri WII Design Studio · 懂种植 · 懂气象</div>
@@ -323,6 +280,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei
         </div>
         <div class="field"><label>作物</label><select id="rt-crop"></select></div>
         <div class="field"><label>保险责任</label><select id="rt-peril"></select></div>
+        <div class="field"><label>指数口径</label><select id="rt-idxtype">
+          <option value="absolute">绝对阈值型（如 Tmin ≤ −3℃）</option>
+          <option value="anomaly">距平降幅型（如较常年同期偏低 8–10℃）</option>
+        </select></div>
         <div class="field"><label>方案类型</label><select id="rt-paytype">
           <option value="step">阶梯型理赔阈值（分档查表）</option>
           <option value="linear">线性理赔阈值（触发→封顶线性折算）</option>
@@ -436,24 +397,32 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei
 </div>
 
 <!-- 脚本：知识库 → 引擎一/二 → 主控 -->
-<script src="assets/js/app.bundle.js" defer></script>
+<script src="assets/js/knowledge.js"></script>
+<script src="assets/js/crops-extra.js"></script>
+<script src="assets/js/phenology.js"></script>
+<script src="assets/js/pheno-data.js"></script>
+<script src="assets/js/pheno-data-batchAB.js"></script>
+<script src="assets/js/engine-reverse.js"></script>
+<script src="assets/js/calibrate.js"></script>
+<script src="assets/js/providers.js"></script>
+<script src="assets/js/qc.js"></script>
+<script src="assets/js/engine-rate.js"></script>
+<script src="assets/js/map.js"></script>
+<script src="assets/js/engine-scenario.js"></script>
+<script src="assets/js/engine-scheme.js"></script>
+<script src="assets/js/app.js"></script>
 
 <script>
-/* 【已停用 Service Worker】
-   原因：SW 的 stale-while-revalidate 让老用户持续拿到旧 bundle，
-   出现过"服务端已修好、页面仍报 403"的排查黑洞。静态站点 HTTP 缓存已足够，
-   此处主动注销并清空 SW 缓存，确保所有人拿到最新代码。 */
+/* 【Service Worker 已停用】主动注销历史遗留的 SW 并清空缓存。
+   曾因 SW 的缓存优先策略导致"服务端已修好、用户仍跑旧代码"，
+   此处每次加载都执行一次注销，确保所有人拿到最新版本。 */
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function () {
-    navigator.serviceWorker.getRegistrations().then(function (rs) {
-      rs.forEach(function (r) { r.unregister(); });
-    }).catch(function () { });
-    if (window.caches && caches.keys) {
-      caches.keys().then(function (ks) {
-        ks.forEach(function (k) { caches.delete(k); });
-      }).catch(function () { });
-    }
-  });
+  navigator.serviceWorker.getRegistrations().then(function (rs) {
+    rs.forEach(function (r) { r.unregister(); });
+  }).catch(function () { });
+  if (window.caches && caches.keys) {
+    caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); }).catch(function () { });
+  }
 }
 </script>
 </body>
