@@ -9007,8 +9007,19 @@
     out.style.display = 'block';
 
     document.getElementById('rv-to-rate').addEventListener('click', function () {
-      window.RateEngine.loadFromScheme(scheme);
+      // 先切页签再灌数据：若灌数据过程中抛错（例如该作物在本区无物候、窗口为空），
+      // 至少用户还能看到引擎二本身并手工补录，而不是"点了没反应"。
       window.switchTab('rate');
+      try {
+        window.RateEngine.loadFromScheme(scheme);
+      } catch (e) {
+        var out = document.getElementById('rate-out');
+        if (out) {
+          out.style.display = 'block';
+          out.innerHTML = '<div class="prog-err">方案已切到本页，但自动带入时出错：' + e.message +
+            '<br>通常是因为该作物在本农业区没有可用物候窗口。请手动选择作物/主害并填写保险期间后再运行回测。</div>';
+        }
+      }
     });
     document.getElementById('rv-copy').addEventListener('click', function () {
       navigator.clipboard && navigator.clipboard.writeText(JSON.stringify(scheme, null, 2));
@@ -10064,9 +10075,22 @@
     var p2 = scheme.combo ? scheme.combo.secondary : null;
     document.getElementById('rt-crop').value = scheme.crop;
     document.getElementById('rt-peril').value = p1.peril;
-    document.getElementById('rt-m1').value = p1.window[0]; document.getElementById('rt-d1').value = p1.window[1];
-    document.getElementById('rt-m2').value = p1.window[2]; document.getElementById('rt-d2').value = p1.window[3];
-    document.getElementById('rt-sum').value = scheme.sumInsured;
+    // 窗口可能为空：该作物在本区无物候数据时 subScheme 返回 null。
+    // 原来直接取 window[0] 会抛 TypeError，导致整段带入中断、页签也不切。
+    var _w = p1.window;
+    if (!_w || _w.length < 4 || _w.some(function (x) { return x == null || isNaN(x); })) {
+      _w = [1, 1, 12, 31];
+      var _o = document.getElementById('rate-out');
+      if (_o) {
+        _o.style.display = 'block';
+        _o.innerHTML = '<div class="prog-err">该方案在「' + (p1.perilName || p1.peril) +
+          '」上没有可用物候窗口（该作物在本农业区未收录对应阶段），保险期间已置为占位值 1/1–12/31。' +
+          '<br>请先按物候推荐或手工设置保险期间，再运行回测。</div>';
+      }
+    }
+    document.getElementById('rt-m1').value = _w[0]; document.getElementById('rt-d1').value = _w[1];
+    document.getElementById('rt-m2').value = _w[2]; document.getElementById('rt-d2').value = _w[3];
+    document.getElementById('rt-sum').value = scheme.sumInsured || 400;
     var city = KB.cities.filter(function (c) { return c.z === scheme.zone; })[0] || KB.cities[0];
     document.getElementById('rt-city').value = city.lat + ',' + city.lon + ',' + city.z;
     bindPeril();
