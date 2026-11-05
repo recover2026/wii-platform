@@ -10108,15 +10108,47 @@
       .filter(function (x) { return !isNaN(x); });
   }
 
-  /* ---------- 气象取数（Open-Meteo Archive，逐年） ---------- */
+  /* ---------- 气象取数（多源 + 逐级降级） ----------
+     旧实现直连 Open-Meteo，一旦该域被网络策略拦截就整条回测失败（"Failed to fetch"）。
+     现在改为：ERA5 → NASA POWER → 直连兜底，任一可用即可出结果。
+     返回仍保持 Open-Meteo 的 daily 形态，下游无需改动。 */
   async function fetchYear(lat, lon, y) {
-    var url = 'https://archive-api.open-meteo.com/v1/archive?latitude=' + lat + '&longitude=' + lon +
-      '&start_date=' + y + '-01-01&end_date=' + y + '-12-31' +
-      '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max&timezone=Asia%2FShanghai';
-    var r = await fetch(url);
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    var j = await r.json();
-    return j.daily;
+    var lastErr = null;
+
+    // 1) 走多源适配层（providers.js）：主源 ERA5，失败自动换 NASA POWER
+    if (window.WIIProviders && window.WIIProviders.fetchYear) {
+      var order = ['era5', 'power'];
+      for (var i = 0; i < order.length; i++) {
+        try {
+          var c = await window.WIIProviders.fetchYear(order[i], lat, lon, y);
+          if (c && c.time && c.time.length) {
+            return {
+              time: c.time,
+              temperature_2m_max: c.tmax,
+              temperature_2m_min: c.tmin,
+              precipitation_sum: c.prcp,
+              wind_speed_10m_max: c.wind,
+              __source: order[i]
+            };
+          }
+        } catch (e) { lastErr = e; }
+      }
+    }
+
+    // 2) 直连兜底（网络允许时的最快路径）
+    try {
+      var url = 'https://archive-api.open-meteo.com/v1/archive?latitude=' + lat + '&longitude=' + lon +
+        '&start_date=' + y + '-01-01&end_date=' + y + '-12-31' +
+        '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max&timezone=Asia%2FShanghai';
+      var r = await fetch(url);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      var j = await r.json();
+      if (j && j.daily) return j.daily;
+    } catch (e) { lastErr = e; }
+
+    throw new Error('所有气象源均不可达（ERA5 / NASA POWER / 直连）。' +
+      '请确认当前网络可访问 archive-api.open-meteo.com 或 power.larc.nasa.gov；' +
+      (lastErr ? '最后一次错误：' + lastErr.message : ''));
   }
 
   function windowIdx(time, m1, d1, m2, d2) {
