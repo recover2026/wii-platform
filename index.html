@@ -439,10 +439,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei
 <script src="assets/js/app.bundle.js" defer></script>
 
 <script>
-/* Service Worker：第二次打开走本地缓存，秒开。注册失败静默，不影响使用。 */
+/* 【已停用 Service Worker】
+   原因：SW 的 stale-while-revalidate 让老用户持续拿到旧 bundle，
+   出现过"服务端已修好、页面仍报 403"的排查黑洞。静态站点 HTTP 缓存已足够，
+   此处主动注销并清空 SW 缓存，确保所有人拿到最新代码。 */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('sw.js').catch(function () { });
+    navigator.serviceWorker.getRegistrations().then(function (rs) {
+      rs.forEach(function (r) { r.unregister(); });
+    }).catch(function () { });
+    if (window.caches && caches.keys) {
+      caches.keys().then(function (ks) {
+        ks.forEach(function (k) { caches.delete(k); });
+      }).catch(function () { });
+    }
   });
 }
 </script>
