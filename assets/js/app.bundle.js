@@ -9872,7 +9872,23 @@
     // 当前默认灾害（此前此处直接引用未声明变量 peril，init 一进函数即抛 ReferenceError，
     // 导致「运行回测」未绑定、app.js 后续地图/方案设计器/场景工作台初始化被整体跳过）
     var peril = pl.value || 'rainy';
-    buildRatioEditor(curRatio, DEFS[peril], 'rt-ratio');
+    buildRatioEditor(curRatio, pickDefs(peril), 'rt-ratio');
+    // 切换"指数口径"时：换默认表 + 重画表头，否则用户会拿绝对阈值的表当距平表用
+    var _it = document.getElementById('rt-idxtype');
+    if (_it && !_it._bound) {
+      _it._bound = true;
+      _it.addEventListener('change', function () {
+        var pv = document.getElementById('rt-peril').value || 'rainy';
+        if (curIndexType() === 'anomaly' && !ANOMALY_OK[pv]) {
+          alert('「' + pv + '」不支持距平口径（只有低温/高温适用），已保持绝对阈值型');
+          _it.value = 'absolute';
+          return;
+        }
+        buildRatioEditor(curRatio, pickDefs(pv), 'rt-ratio');
+        var p2 = document.getElementById('rt-peril2');
+        if (p2 && p2.value) buildRatioEditor(curRatio2, pickDefs(p2.value), 'rt-ratio2');
+      });
+    }
     // 方案类型切换（阶梯↔线性）
     var pt = document.getElementById('rt-paytype');
     if (pt) pt.addEventListener('change', applyPayType);
@@ -9909,7 +9925,7 @@
       ? '<label class="rt-l">起赔连续日数 <input id="rt-minrun" type="number" value="3" min="1" step="1" class="rt-i"></label>'
       : '';
     box.innerHTML = extra + '<div class="rt-hint">' + HINTS[peril] + '</div>';
-    buildRatioEditor(curRatio, DEFS[peril], 'rt-ratio');
+    buildRatioEditor(curRatio, pickDefs(peril), 'rt-ratio');
     ensureLinear(curLinear, peril, 'rt-linear');
   }
   function bindPeril2() {
@@ -9939,8 +9955,24 @@
     frost: [['-1', 10], ['-3', 20], ['-5', 30]],
     heat: [['35', 10], ['37', 20], ['39', 30]],
     drought: [['40', 10], ['20', 20], ['5', 30]],
-    wind: [['13.8', 10], ['17', 20], ['20.8', 30]]
+    wind: [['13.8', 10], ['17', 20], ['20.8', 30]],
+    // 距平型默认表：变量是『较常年同期偏低/偏高多少℃』。
+    // 业务给的低温分档 8–10→1%、10–12→2%、12–15→4%、15–18→8%、18–21→13%，
+    // 因区间连续且递增，等价于『达到 8 赔 1%、达到 10 赔 2%…』的阶梯表。
+    frostAnomaly: [['8', 1], ['10', 2], ['12', 4], ['15', 8], ['18', 13]],
+    heatAnomaly: [['4', 1], ['6', 2], ['8', 4], ['10', 8], ['12', 13]]
   };
+
+  // 哪些灾种支持距平口径
+  var ANOMALY_OK = { frost: 1, heat: 1 };
+  function curIndexType() {
+    var el = document.getElementById('rt-idxtype');
+    return el ? el.value : 'absolute';
+  }
+  function pickDefs(peril) {
+    if (curIndexType() === 'anomaly' && ANOMALY_OK[peril]) return DEFS[peril + 'Anomaly'] || DEFS[peril];
+    return DEFS[peril];
+  }
 
   function buildRatioEditor(arr, pairs, boxId) {
     // 复制默认到目标数组
@@ -9951,7 +9983,10 @@
   function renderRatioEditor(arr, boxId) {
     var box = document.getElementById(boxId);
     if (!box) return;
-    var html = '<div class="rt-re-head">分段赔付比例表（触发阈值 → 赔付占保额比例%）</div>';
+    var _anom = (typeof curIndexType === 'function' && curIndexType() === 'anomaly');
+    var html = '<div class="rt-re-head">' + (_anom
+      ? '分段赔付比例表（较常年同期降幅 → 赔付占保额比例%）'
+      : '分段赔付比例表（触发阈值 → 赔付占保额比例%）') + '</div>';
     arr.forEach(function (row, i) {
       html += '<div class="rt-re-row"><input class="rt-i rt-k" data-i="' + i + '" value="' + row[0] + '">' +
         '<span class="rt-arrow">→</span><input class="rt-i rt-v" data-i="' + i + '" value="' + row[1] + '"><span>%</span>' +
@@ -10076,6 +10111,7 @@
       dir: (peril === 'frost' || peril === 'drought') ? 'low' : 'high',
       dir2: (peril2 === 'frost' || peril2 === 'drought') ? 'low' : 'high',
       source: (document.getElementById('rt-source') && document.getElementById('rt-source').value) || 'openmeteo',
+      indexType: curIndexType(),   // 'absolute' | 'anomaly'（距平降幅型）
       proxy: !!(document.getElementById('rt-proxy') && document.getElementById('rt-proxy').checked),
       qm: !!(document.getElementById('rt-qm') && document.getElementById('rt-qm').checked),
       precipFactor: parseFloat((document.getElementById('rt-pfac') || {}).value) || 1.0,
@@ -10151,6 +10187,28 @@
       (lastErr ? '最后一次错误：' + lastErr.message : ''));
   }
 
+  /* 逐日「常年同期基准」：把回测期内同一月日的多年值取平均。
+     用途：距平型指数算"较常年偏低/偏高多少"，而不是看绝对温度。
+     为什么必须用常年值：同一个 −5℃，在华南是毁灭性寒害、在东北是平常冬天，
+     绝对阈值无法跨区通用，必须换成"比当地常年冷多少"。 */
+  function buildClim(dailyYears, varName) {
+    var sum = {}, cnt = {};
+    dailyYears.forEach(function (dy) {
+      var arr = (dy.daily && dy.daily[varName]) || [];
+      var time = (dy.daily && dy.daily.time) || [];
+      for (var i = 0; i < time.length; i++) {
+        var v = arr[i];
+        if (v == null || isNaN(v)) continue;
+        var md = time[i].slice(5);   // MM-DD
+        sum[md] = (sum[md] || 0) + v;
+        cnt[md] = (cnt[md] || 0) + 1;
+      }
+    });
+    var out = {};
+    Object.keys(sum).forEach(function (k) { out[k] = sum[k] / cnt[k]; });
+    return out;
+  }
+
   function windowIdx(time, m1, d1, m2, d2) {
     var out = [];
     for (var i = 0; i < time.length; i++) {
@@ -10185,6 +10243,21 @@
     if (peril === 'frost') {
       var tmin = idx.map(function (i) { return D.tmin[i]; }).filter(function (v) { return v != null; });
       if (!tmin.length) return 0;
+      // 距平型（推荐用于低温）：看"较常年同期偏低多少"，取窗口内最大降幅。
+      // 与绝对阈值型的区别：−5℃ 在华南是毁灭性寒害、在东北是平常冬天，
+      // 绝对线无法跨区通用；降幅能自动适配当地气候。
+      if (S.indexType === 'anomaly' && S._clim) {
+        var TIME = D.time || daily.time || [];
+        var devs = idx.map(function (i) {
+          var v = D.tmin[i]; if (v == null) return null;
+          var md = TIME[i] ? TIME[i].slice(5) : null;
+          if (!md) return null;
+          var b = S._clim[md];
+          return b == null ? null : (b - v);   // 正值 = 比常年更冷
+        }).filter(function (v) { return v != null; });
+        if (!devs.length) return 0;
+        return payLookup(S, Math.max.apply(null, devs), 'high');
+      }
       return payLookup(S, Math.min.apply(null, tmin), 'low');
     }
     if (peril === 'heat') {
@@ -10196,6 +10269,19 @@
         return D.tmax[i];
       }).filter(function (v) { return v != null; });
       if (!hv.length) return 0;
+      // 距平型高温：看"较常年同期偏高多少"
+      if (S.indexType === 'anomaly' && S._clim) {
+        var T2 = D.time || daily.time || [];
+        var hd = idx.map(function (i) {
+          var v = hv.length && D.tmax[i] != null ? D.tmax[i] : null;
+          if (v == null) return null;
+          var md = T2[i] ? T2[i].slice(5) : null;
+          if (!md) return null;
+          var b = S._clim[md];
+          return b == null ? null : (v - b);   // 正值 = 比常年更热
+        }).filter(function (v) { return v != null; });
+        if (hd.length) return payLookup(S, Math.max.apply(null, hd), 'high');
+      }
       return payLookup(S, Math.max.apply(null, hv), 'high');
     }
     if (peril === 'drought') {
@@ -10211,6 +10297,17 @@
   }
 
   function lookup(ratio, V, dir) {
+    // 区间型分档表：[{lo,hi,p}] —— 用于"距平/降幅"指数
+    //（如"较常年偏低 8–10℃ 赔 1%、10–12℃ 赔 2%"）。
+    // 与阈值型的差别是语义：阈值型问"有没有到这条线"，区间型问"落在了哪一档"。
+    if (Array.isArray(ratio)) {
+      for (var i = 0; i < ratio.length; i++) {
+        var b = ratio[i];
+        if (V >= b.lo && V < b.hi) return b.p || 0;
+      }
+      var last = ratio[ratio.length - 1];
+      return (last && V >= last.hi) ? (last.p || 0) : 0;
+    }
     var keys = Object.keys(ratio).map(Number);
     var valid = dir === 'high' ? keys.filter(function (k) { return V >= k; }) : keys.filter(function (k) { return V <= k; });
     if (!valid.length) return 0;
@@ -10383,6 +10480,12 @@
       var W = windowIdx(daily.time, S.m1, S.d1, S.m2, S.d2);
       annualIndex.push(Calibrate.rawIndex(S.peril, daily, W, S.minRun, HEAT_METRIC));
     }
+    // 距平型指数：先用全部年份算出逐日常年基准，再逐年算降幅/升幅
+    if (S.indexType === 'anomaly') {
+      var climVar = (S.peril === 'frost') ? 'tmin' : 'tmax';
+      S._clim = buildClim(dailyYears, climVar);
+    }
+
     var annual1 = dailyYears.map(function (dy) {
       var W = windowIdx(dy.daily.time, S.m1, S.d1, S.m2, S.d2);
       return triggerRatio(S.peril, dy.daily, W,
@@ -10715,6 +10818,7 @@
   }
 
   window.RateEngine = {
+    buildClim: buildClim, lookup: lookup,
     init: initForm, loadFromScheme: loadFromScheme,
     fetchYear: fetchYear, fetchYearCached: fetchYearCached,
     compute: compute, sensitivity: sensitivity,
