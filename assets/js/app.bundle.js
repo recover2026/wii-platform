@@ -1084,7 +1084,10 @@
     return hi >= lo ? hi - lo + 1 : 0;
   }
 
-  // 全生育期跨度（农业年度轴上：首阶段起点 → 末阶段终点）
+  // 【已废弃】早期的"全生育期跨度"实现：直接把首尾阶段相连，不区分熟期与生产轨，
+  // 会把甘蔗的春植/秋植、桑蚕的桑园/养蚕连成一条假链（实测 184 天被算成 121 天）。
+  // 现由 chainSpan()（取最大链）与 seasonSpanSum()（多熟季叠加）分别承担两种语义。
+  // 保留仅为兼容外部调用；内部代码不得再使用。
   function seasonLength(cropKey, regionKey) {
     var st = stagesOf(cropKey, regionKey).filter(function (s) { return s.spanOk; });
     if (!st.length) return 0;
@@ -1104,9 +1107,12 @@
     var all = stagesOf(cropKey, regionKey).filter(function (s) { return s.spanOk; });
     if (!all.length) return 0;
     var groups = {}, order = [];
+    // 分组键必须与 chainSpan / hasParallelStages 一致（熟期 + 生产轨）。
+    // 只按熟期分组会把桑蚕的"桑园"与"养蚕"累加到一条链上，得出虚高的跨度。
     all.forEach(function (s) {
-      if (!groups[s.season]) { groups[s.season] = []; order.push(s.season); }
-      groups[s.season].push(s);
+      var k = s.season + '||' + (s.track || '作物');
+      if (!groups[k]) { groups[k] = []; order.push(k); }
+      groups[k].push(s);
     });
     var best = 0;
     order.forEach(function (k) {
