@@ -10093,6 +10093,11 @@
     document.getElementById('rt-sum').value = scheme.sumInsured || 400;
     var city = KB.cities.filter(function (c) { return c.z === scheme.zone; })[0] || KB.cities[0];
     document.getElementById('rt-city').value = city.lat + ',' + city.lon + ',' + city.z;
+    // 同时写入经纬度输入框：readScheme 虽会回退用城市下拉，但只要输入框有值就优先用它。
+    // 只设下拉不设输入框，曾导致"方案带入后回测报坐标无效"——用户看到的就是"没法测算"。
+    var _g = scheme.geo || {};
+    document.getElementById('rt-lat').value = (_g.lat != null ? _g.lat : city.lat);
+    document.getElementById('rt-lon').value = (_g.lon != null ? _g.lon : city.lon);
     bindPeril();
     buildRatioEditor(curRatio, Object.keys(p1.ratio).map(function (k) { return [k, Math.round(p1.ratio[k] * 100)]; }), 'rt-ratio');
     var pt = document.getElementById('rt-paytype');
