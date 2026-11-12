@@ -662,6 +662,14 @@
     return j;
   }
   async function fetchYearCached(lat, lon, y, onSrc, srcId) {
+    // 0) 本地预置网格优先：这是回测的实际入口。
+    // 之前把本地检查挂在 fetchYear 上，那条路径没被调用，导致"数据已下载却仍走在线"。
+    var _lg = null;
+    try { _lg = await localYear(lat, lon, y); } catch (e) { _lg = null; }
+    if (_lg && _lg.time && _lg.time.length) {
+      if (onSrc) onSrc("本地预置网格（离线可用）");
+      return _lg;
+    }
     var id = srcId || 'era5';
     if (id === 'openmeteo') id = 'era5';
     // 本地缓存仅由 ERA5 预下载；其他源一律走在线适配器（缓存口径不同，混用会污染结论）
