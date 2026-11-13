@@ -10602,6 +10602,19 @@
   /* ---------- 取数：多源 + 多格点均值 + 分位数映射 ---------- */
   var PROXY_OFFSETS = [[0, 0], [0.25, 0], [-0.25, 0], [0, 0.25], [0, -0.25]];
   async function getDaily(lat, lon, y, S, onSrc) {
+    // 本地预置网格优先：本地存的就是 0.25° 网格值，本身就是单格点，
+    // 不必再做 5 点均值平滑——否则 5 个偏移点里 4 个没本地数据，
+    // 每次回测白跑 4 次在线请求（实测"在线被拦 5 次"里有 4 次来自这里）。
+    try {
+      var _lg0 = await localYear(lat, lon, y);
+      if (_lg0 && _lg0.time && _lg0.time.length) {
+        var _m0 = Calibrate.ensureCanon(_lg0);
+        if (onSrc) onSrc("本地预置网格（离线可用）");
+        if (S.precipFactor && S.precipFactor !== 1) _m0 = Calibrate.correctDaily(_m0, S.precipFactor);
+        if (S._qm) _m0 = window.WIIQC.applyMonthly(_m0, S._qm);
+        return _m0;
+      }
+    } catch (e) { }
     var srcId = S.source || 'era5';
     var main;
     if (S.proxy && srcId !== 'station') {
